@@ -41,3 +41,34 @@ jobs:
       - name: Supabase logs on failure
         if: failure()
         run: docker ps -a && docker logs supabase_auth_nativecloud 2>&1 | tail -50 || true
+
+  client:
+    name: The NCF client against the real stack
+    runs-on: ubuntu-latest
+    env:
+      NCF_REF: nativecloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: NativeCompute/ncf
+          ref: ${{ env.NCF_REF }}
+          path: ncf
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ncf
+      - name: Build the client tests
+        working-directory: ncf
+        run: cargo test -p ncf --features cloud,testing --no-run
+      - name: Start Supabase
+        run: supabase start -x studio,imgproxy,storage-api,realtime,logflare,vector,supavisor,postgres-meta
+      - name: Live round trip from ncf::cloud
+        run: |
+          eval "$(supabase status -o env)"
+          cd ncf
+          NCF_CLOUD_URL="$API_URL" NCF_CLOUD_ANON_KEY="$ANON_KEY" NCF_CLOUD_SERVICE_KEY="$SERVICE_ROLE_KEY" \
+            cargo test -p ncf --features cloud,testing live_nativecloud -- --ignored --nocapture
