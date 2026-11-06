@@ -1,0 +1,43 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  postgres:
+    name: Schema, security rules and functions on Postgres
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No comments in the source
+        run: bash tools/no-comments.sh
+      - name: No secrets in the repo
+        run: bash tools/no-secrets.sh
+      - name: Database tests on a plain Postgres with a Supabase stand-in
+        run: bash tests/run.sh local
+
+  supabase:
+    name: The real Supabase stack, over HTTP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start Supabase
+        run: supabase start -x studio,imgproxy,storage-api,realtime,logflare,vector,supavisor,postgres-meta
+      - name: Database tests on the Supabase database
+        run: |
+          eval "$(supabase status -o env)"
+          DATABASE_URL="$DB_URL" bash tests/run.sh remote
+      - name: Sign-up, sign-in, teams and scripts over HTTP
+        run: |
+          eval "$(supabase status -o env)"
+          API_URL="$API_URL" ANON_KEY="$ANON_KEY" SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node tests/api/smoke.mjs
+      - name: Supabase logs on failure
+        if: failure()
+        run: docker ps -a && docker logs supabase_auth_nativecloud 2>&1 | tail -50 || true
