@@ -70,5 +70,5 @@ jobs:
         run: |
           eval "$(supabase status -o env)"
           cd ncf
-          NCF_CLOUD_URL="$API_URL" NCF_CLOUD_ANON_KEY="$ANON_KEY" NCF_CLOUD_SERVICE_KEY="$SERVICE_ROLE_KEY" \
+          NCF_CLOUD_REQUIRED=1 NCF_CLOUD_URL="$API_URL" NCF_CLOUD_ANON_KEY="$ANON_KEY" NCF_CLOUD_SERVICE_KEY="$SERVICE_ROLE_KEY" \
             cargo test -p ncf --features cloud,testing live_nativecloud -- --ignored --nocapture
