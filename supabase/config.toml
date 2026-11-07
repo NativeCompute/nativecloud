@@ -32,6 +32,9 @@ enabled = false
 enabled = true
 policy = "per_worker"
 
+[edge_runtime.secrets]
+NATIVECLOUD_WEB_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:4173"
+
 [analytics]
 enabled = false
 

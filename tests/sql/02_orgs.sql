@@ -43,6 +43,7 @@ select tests.act_as((select stranger from ids));
 select tests.eq((select count(*)::int from public.organizations), 0, 'strangers see no organizations');
 select tests.eq((select count(*)::int from public.workspaces), 1, 'only their own space');
 select tests.eq((select count(*)::int from public.invites), 0, 'and no one else''s invites');
+select tests.fails($$select public.org_people((select id from org))$$, 'nc:not_found', 'and no one else''s people');
 select tests.fails($$select public.org_by_slug('heist-room')$$, 'nc:not_found', 'an organization is hidden from outsiders');
 select tests.fails($$select public.accept_invite((select id from inv where who = 'member'))$$, 'nc:not_found', 'an invite only works for its address');
 select tests.fails($$select public.invite_member((select id from org), 'x@example.com', 'member')$$, 'nc:not_found', 'strangers can''t invite');
@@ -65,6 +66,8 @@ select tests.eq(public.org_role((select id from org)), 'guest', 'guests join as 
 select tests.eq((select count(*)::int from public.workspaces where kind = 'space'), 1, 'and see only the spaces they were invited to');
 select tests.eq(public.role_in((select pitches from org)), 'viewer', 'with the role they were given there');
 select tests.eq((select count(*)::int from public.org_members), 1, 'guests don''t see the member list');
+select tests.eq((select count(*)::int from public.org_people((select id from org))), 3, 'guests see themselves and who runs the organization');
+select tests.ok((select bool_and(x ->> 'email' is null) from public.org_people((select id from org)) x), 'without their emails');
 select tests.fails($$select public.create_space((select id from org), 'Mine')$$, 'nc:forbidden', 'and can''t create spaces');
 
 select tests.act_as((select late from ids));
@@ -78,6 +81,8 @@ select tests.fails($$select public.set_org_role((select id from org), (select ow
 select tests.fails($$select public.remove_member((select id from org), (select owner from ids))$$, 'nc:forbidden', 'or the owner removed');
 select public.set_space_member((select pitches from org), (select guest from ids), 'editor');
 select tests.eq((select role from public.memberships where workspace_id = (select pitches from org) and user_id = (select guest from ids)), 'editor', 'admins change who is in a space');
+select tests.eq((select count(*)::int from public.org_people((select id from org)) x where x ->> 'email' is not null), 4, 'admins see everyone''s email');
+select tests.eq((select jsonb_array_length(x -> 'spaces') from public.org_people((select id from org)) x where (x ->> 'user_id')::uuid = (select guest from ids)), 1, 'and which spaces each person is in');
 select public.update_org_settings((select id from org), '{"members_create_spaces": false}');
 select public.rename_org((select id from org), 'Heist Studio');
 select public.set_org_slug((select id from org), 'heist-studio');
@@ -87,6 +92,9 @@ select tests.act_as((select member from ids));
 select tests.fails($$select public.set_org_role((select id from org), (select guest from ids), 'member')$$, 'nc:forbidden', 'members don''t manage people');
 select tests.fails($$select public.create_space((select id from org), 'Nope')$$, 'nc:forbidden', 'and can''t create spaces once that''s turned off');
 select tests.eq((select count(*)::int from public.org_members), 4, 'members see everyone');
+select tests.eq((select count(*)::int from public.org_people((select id from org))), 4, 'and everyone on the people page');
+select tests.eq((select count(*)::int from public.org_people((select id from org)) x where x ->> 'email' is not null), 1, 'with only their own email');
+select tests.eq((select x ->> 'role' from public.org_people((select id from org)) x limit 1), 'owner', 'the owner comes first');
 select tests.eq((select count(*)::int from public.invites where email <> 'member@example.com'), 0, 'but not other people''s invites');
 
 select tests.act_as((select owner from ids));

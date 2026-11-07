@@ -1,4 +1,4 @@
-import { bearer, claims, env, json, rest, serve, serviceRpc } from "../_shared/supabase.ts";
+import { bearer, claims, env, json, rest, serve, serviceRpc, signedInAt } from "../_shared/supabase.ts";
 
 const FRESH_SECONDS = 600;
 
@@ -8,7 +8,7 @@ serve(async (req) => {
   if (!who.ok) return json(401, { error: "nc:auth" });
   const user = await who.json();
 
-  const issued = Number(claims(token).iat ?? 0);
+  const issued = signedInAt(claims(token));
   if (!issued || Date.now() / 1000 - issued > FRESH_SECONDS) {
     return json(403, { error: "nc:reauth" });
   }

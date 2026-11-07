@@ -72,3 +72,61 @@ jobs:
           cd ncf
           NCF_CLOUD_REQUIRED=1 NCF_CLOUD_URL="$API_URL" NCF_CLOUD_ANON_KEY="$ANON_KEY" NCF_CLOUD_SERVICE_KEY="$SERVICE_ROLE_KEY" \
             cargo test -p ncf --features cloud,testing live_nativecloud -- --ignored --nocapture
+
+  web:
+    name: The web panel, end to end on the real stack
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Which NCF the panel is built on
+        id: ncf
+        run: echo "ref=$(cat ncf.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: NativeCompute/ncf
+          ref: ${{ steps.ncf.outputs.ref }}
+          path: ncf
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: The NCF styles match that NCF
+        run: bash tools/ncf.sh --check ../ncf
+      - name: Install
+        run: npm ci
+      - name: Types and unit tests
+        run: |
+          npm run check
+          npm test
+      - name: Start Supabase
+        working-directory: .
+        run: supabase start -x studio,imgproxy,storage-api,realtime,logflare,vector,supavisor,postgres-meta
+      - name: Build against the local stack
+        run: |
+          eval "$(supabase status -o env)"
+          VITE_SUPABASE_URL="$API_URL" VITE_SUPABASE_ANON_KEY="$ANON_KEY" npx vite build
+          grep -q "connect-src 'self' $API_URL" dist/_headers
+      - name: Browser
+        run: npx playwright install --with-deps chromium
+      - name: End to end
+        run: |
+          eval "$(supabase status -o env)"
+          API_URL="$API_URL" ANON_KEY="$ANON_KEY" SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" MAILPIT_URL="${MAILPIT_URL:-${INBUCKET_URL:-http://127.0.0.1:54324}}" CI=1 npx playwright test
+      - name: Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 7
+      - name: Supabase logs on failure
+        if: failure()
+        working-directory: .
+        run: docker logs supabase_edge_runtime_nativecloud 2>&1 | tail -80 || true

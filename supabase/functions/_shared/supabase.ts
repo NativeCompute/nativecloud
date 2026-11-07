@@ -39,6 +39,12 @@ export function claims(token: string): Record<string, unknown> {
   }
 }
 
+export function signedInAt(c: Record<string, unknown>): number {
+  const amr = Array.isArray(c.amr) ? c.amr : [];
+  const times = amr.map((a) => Number((a as Record<string, unknown>)?.timestamp)).filter((t) => Number.isFinite(t) && t > 0);
+  return times.length ? Math.max(...times) : Number(c.iat ?? 0);
+}
+
 export const webUrl = (): string => (env("NATIVECLOUD_WEB_URL") || "https://cloud.nativecompute.net").replace(/\/+$/, "");
 
 export function safeNext(next: unknown): string {

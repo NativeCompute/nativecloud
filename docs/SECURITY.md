@@ -18,12 +18,14 @@
   - 2 MB per project and per snapshot;
   - 16 KB per settings blob and per project's `meta`;
   - 200-character titles and 80-character names.
-- **Account deletion** needs a session less than 10 minutes old (sign in again first). It hands organizations to the next admin or member and removes everything else. Deleting an organization or a space, and handing an organization over, need a fresh session too (`nc:reauth`).
+- **Account deletion** needs a session signed in less than 10 minutes ago. That's the sign-in time in the token's `amr` claim, which a token refresh doesn't change. It hands organizations to the next admin or member and removes everything else. Deleting an organization or a space, and handing an organization over, need a fresh session too (`nc:reauth`).
 - **Passwords only on the web.** Apps sign in through the browser with an authorization code and PKCE (RFC 8252), so they never see a password, email code or second factor. Sign-in codes are stored only as hashes, last 2 minutes, work once, and are useless without the app's verifier; five wrong verifiers burn a code. Every app has its own session, so each one can be signed out on its own.
 - **Web handoff links** carry a one-time code in the URL fragment, which never reaches a server log. The code lasts 5 minutes and only ever leads to a path on the panel.
 - **Staff** are rows in `staff`, added by hand. Support staff can look and change plans; only staff admins suspend or delete. Every staff action is written to `audit`, and the console is invisible (`nc:not_found`) to everyone else.
 - **Suspension:** a suspended account is stopped at every function (`nc:suspended`). A suspended organization is read-only, and its locks are freed.
 - **Audit log:** joins, role changes, removals, transfers, moves and deletions are written to `audit`. Owners and admins can read their team's entries.
+
+- **The web panel** sends a strict Content Security Policy with no third-party scripts, keeps codes in URL fragments or on `127.0.0.1`, and only redirects to paths on itself. See [WEB.md](WEB.md#security).
 
 ## Tests that guard this
 `tests/sql/` runs on every push, against both a plain Postgres and the real Supabase stack. It covers:

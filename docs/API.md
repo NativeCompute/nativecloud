@@ -93,7 +93,7 @@ A lease counts only while `expires_at` is in the future; compare against the ser
 | `register_device` | `device_id`, `name`, `platform?` | none |
 | `forget_device` | `device_id` | none |
 | `put_app_settings` | `app_id`, `body` (16 KB max) | none |
-| `usage_summary` | none | `{plan, usage: {projects, bytes, owned_teams}}` |
+| `usage_summary` | none | `{plan, usage: {projects, bytes, owned_orgs}}` |
 
 ### Organizations
 An organization is the tenant. It holds the plan, the people and its spaces, and every project lives in a space. Organization roles are `owner`, `admin`, `member` and `guest`; inside a space, people are `editor` or `viewer`. Members join every space, while guests join only the spaces they're invited to.
@@ -102,6 +102,7 @@ An organization is the tenant. It holds the plan, the people and its spaces, and
 |---|---|---|
 | `create_org` | `name`, `slug?` | Returns `{id, slug, space}`. It starts on a Team trial with one space, "General". Counts against your personal plan's `max_owned_orgs`. |
 | `org_by_slug` | `slug` | `{id, name, slug, role, settings, plan, usage, trial_ends_at, suspended}`. Old slugs still resolve. |
+| `org_people` | `org` | One row per person: `{user_id, display_name, avatar_hue, role, joined_at}`. Owners and admins also get `email`, `last_active` and `spaces: [{id, role}]`; members get their own email only. Guests see themselves and the owners and admins. |
 | `rename_org` / `set_org_slug` | `org`, `name` or `slug` | Owner or admin. |
 | `update_org_settings` | `org`, `settings` | `{"members_create_spaces": bool}`. |
 | `delete_org` | `org` | Owner only, with a session less than 10 minutes old. Deletes its spaces and projects. |

@@ -30,9 +30,13 @@
    | `SUPABASE_DB_URL` | Project Settings → Database → Connection string (session pooler) |
    | `BACKUP_AGE_PUBLIC_KEY` | `age-keygen -o nativecloud-backup.key` on your computer. Keep the key file safe and offline; paste only the `age1…` public key. |
 
-8. **Deploy.** Actions → Deploy → Run workflow. Later, pushing a `v*` tag deploys.
-9. **Make yourself staff.** In the SQL editor: `insert into public.staff values ('<your user id>', 'admin');`
-10. **Point the apps at it.** The project URL and anon key go into NCF's `CloudConfig` for each app.
+8. **The web panel on Cloudflare Pages.**
+   - In Cloudflare, create a Pages project named `nativecloud-web` (direct upload) and add the custom domain `cloud.nativecompute.net`. Cloudflare shows the one DNS record to add.
+   - Add `https://cloud.nativecompute.net` to Supabase's Auth redirect URLs.
+   - On this repo, add the secrets `CLOUDFLARE_API_TOKEN` (a token with Pages edit rights) and `CLOUDFLARE_ACCOUNT_ID`, and the variables `NATIVECLOUD_URL` and `NATIVECLOUD_ANON_KEY` (the same public values as `SUPABASE_URL` and `SUPABASE_ANON_KEY`).
+9. **Deploy.** Actions → Deploy → Run workflow. It applies migrations, deploys every Edge Function, then builds and publishes the panel. Later, pushing a `v*` tag deploys.
+10. **Make yourself staff.** In the SQL editor: `insert into public.staff values ('<your user id>', 'admin');`
+11. **Point the apps at it.** The project URL and anon key go into NCF's `CloudConfig` for each app.
 
 ## Routine
 - **Keep-alive:** free projects pause after 7 days without traffic. `keepalive.yml` pings twice a week. If a project does pause, restore it from the dashboard; nothing is lost.

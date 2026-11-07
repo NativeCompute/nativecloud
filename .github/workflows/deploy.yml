@@ -33,4 +33,34 @@ jobs:
       - name: Apply migrations
         run: supabase db push --password "$SUPABASE_DB_PASSWORD"
       - name: Deploy functions
-        run: supabase functions deploy send-invite delete-account --project-ref "$SUPABASE_PROJECT_REF"
+        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+  web:
+    name: The web panel to Cloudflare Pages
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      VITE_SUPABASE_URL: ${{ vars.NATIVECLOUD_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.NATIVECLOUD_ANON_KEY }}
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Settings are set
+        run: |
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            [ -n "${!v}" ] || { echo "$v is not set in the repository secrets or variables"; exit 1; }
+          done
+      - run: npm ci
+      - run: npm run build
+      - name: Publish
+        run: npx --yes wrangler@4.40.0 pages deploy dist --project-name nativecloud-web --branch main

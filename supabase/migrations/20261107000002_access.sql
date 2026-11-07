@@ -13,10 +13,20 @@ begin
 end;
 $$;
 
+create or replace function public.signed_in_at() returns bigint
+language sql stable security definer set search_path = public, pg_temp as $$
+    select coalesce(
+        (select max((a ->> 'timestamp')::bigint) from jsonb_array_elements(
+            case when jsonb_typeof(auth.jwt() -> 'amr') = 'array' then auth.jwt() -> 'amr' else '[]'::jsonb end) a
+         where a ->> 'timestamp' ~ '^[0-9]+$'),
+        (auth.jwt() ->> 'iat')::bigint,
+        0);
+$$;
+
 create or replace function public.need_fresh() returns void
 language plpgsql stable security definer set search_path = public, pg_temp as $$
 declare
-    issued bigint := coalesce((auth.jwt() ->> 'iat')::bigint, 0);
+    issued bigint := public.signed_in_at();
 begin
     if extract(epoch from now())::bigint - issued > 600 then
         raise exception 'nc:reauth' using errcode = 'P0001';
