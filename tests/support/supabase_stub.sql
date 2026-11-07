@@ -42,3 +42,6 @@ language sql stable as $$
 $$;
 
 grant execute on function auth.uid(), auth.jwt() to anon, authenticated, service_role;
+
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;

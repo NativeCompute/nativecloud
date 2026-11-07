@@ -1,6 +1,6 @@
 create or replace function public.grant_hash(code text) returns text
 language sql immutable as $$
-    select encode(digest(upper(regexp_replace(coalesce(code, ''), '[^A-Za-z0-9]', '', 'g')), 'sha256'), 'hex');
+    select encode(sha256(convert_to(upper(regexp_replace(coalesce(code, ''), '[^A-Za-z0-9]', '', 'g')), 'UTF8')), 'hex');
 $$;
 
 create or replace function public.make_grant(uid uuid, app text, device text, challenge text, life interval) returns text
@@ -12,7 +12,7 @@ declare
     tries int := 0;
 begin
     loop
-        bytes := gen_random_bytes(8);
+        bytes := sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8'));
         code := '';
         for k in 0..7 loop
             code := code || substr(alphabet, (get_byte(bytes, k) % 31) + 1, 1);
