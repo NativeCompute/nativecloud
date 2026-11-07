@@ -8,8 +8,8 @@ test("signing up with the emailed code, then an organization, an invite and a ro
   const started = Date.now() - 2000;
   await page.goto("/sign-up");
   await page.getByLabel("Your name").fill("Dee Park");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/verify\?email=/);
   await page.getByLabel("Code").fill(await mailCode(email, started));
@@ -17,7 +17,7 @@ test("signing up with the emailed code, then an organization, an invite and a ro
 
   await page.goto("/new");
   const name = `Room ${Date.now().toString(36)}`;
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Create organization" }).click();
   await expect(page).toHaveURL(/\/o\/room-[a-z0-9-]+\/members$/);
   await expect(page.getByRole("heading", { name: "Members" })).toBeVisible();
@@ -32,7 +32,7 @@ test("signing up with the emailed code, then an organization, an invite and a ro
   const other = await browser.newContext();
   const eves = await other.newPage();
   await signIn(eves, eve.email, "/me");
-  await expect(eves.getByText(`invited you to`)).toBeVisible();
+  await expect(eves.getByText("invited you to").first()).toBeVisible();
   await eves.getByRole("button", { name: "Join" }).click();
   await expect(eves).toHaveURL(new RegExp(`/o/${slug}$`));
   await expect(eves.getByRole("heading", { name })).toBeVisible();
@@ -55,8 +55,8 @@ test("an app signs in through /login, once, with its own verifier", async ({ pag
   const url = `/login?app=blackline&device=${encodeURIComponent("Ann's Mac")}&challenge=${p.challenge}&state=${p.state}&port=${app.port}`;
   await page.goto(url);
   await expect(page).toHaveURL(/\/sign-in\?next=/);
-  await page.getByLabel("Email").fill(ann.email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Email", { exact: true }).fill(ann.email);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Sign in to Blackline?" })).toBeVisible();
   await expect(page.getByText("Ann's Mac")).toBeVisible();

@@ -79,8 +79,8 @@ export async function mailCode(email: string, after = 0): Promise<string> {
 
 export async function signIn(page: Page, email: string, path = "/") {
   await page.goto(`/sign-in?next=${encodeURIComponent(path)}`);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).not.toHaveURL(/\/sign-in/);
 }
