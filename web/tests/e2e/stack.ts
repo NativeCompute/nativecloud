@@ -9,7 +9,7 @@ export const SERVICE = process.env.SERVICE_ROLE_KEY ?? "";
 export const MAIL = (process.env.MAILPIT_URL ?? "http://127.0.0.1:54324").replace(/\/+$/, "");
 export const PASSWORD = "Correct1horse";
 
-export const unique = (tag: string) => `${tag}.${Date.now().toString(36)}${randomBytes(2).toString("hex")}@example.com`;
+export const unique = (tag: string) => `${tag.toLowerCase().replace(/[^a-z0-9]+/g, "")}.${Date.now().toString(36)}${randomBytes(2).toString("hex")}@example.com`;
 
 async function call(path: string, init: RequestInit & { key?: string; token?: string } = {}) {
   const headers = new Headers(init.headers);
