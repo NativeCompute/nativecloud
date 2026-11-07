@@ -23,20 +23,46 @@ language sql stable security definer set search_path = public, pg_temp as $$
     select pl.* from public.profiles pr join public.plans pl on pl.id = pr.plan_id where pr.id = owner;
 $$;
 
-create or replace function public.owner_of(ws uuid) returns uuid
+create or replace function public.org_plan(org uuid) returns public.plans
 language sql stable security definer set search_path = public, pg_temp as $$
-    select owner_id from public.workspaces where id = ws;
+    select pl.* from public.organizations o join public.plans pl on pl.id = o.plan_id where o.id = org;
+$$;
+
+create or replace function public.plan_for(ws uuid) returns public.plans
+language sql stable security definer set search_path = public, pg_temp as $$
+    select case when w.org_id is null then public.plan_of(w.owner_id) else public.org_plan(w.org_id) end
+    from public.workspaces w where w.id = ws;
 $$;
 
 create or replace function public.account_usage(owner uuid) returns jsonb
 language sql stable security definer set search_path = public, pg_temp as $$
     select jsonb_build_object(
         'projects', (select count(*) from public.projects p join public.workspaces w on w.id = p.workspace_id
-                     where w.owner_id = owner and p.deleted_at is null),
+                     where w.owner_id = owner and w.kind = 'personal' and p.deleted_at is null),
         'bytes', (select coalesce(sum(p.size), 0) from public.projects p join public.workspaces w on w.id = p.workspace_id
-                  where w.owner_id = owner),
-        'owned_teams', (select count(*) from public.workspaces where owner_id = owner and kind = 'team')
+                  where w.owner_id = owner and w.kind = 'personal'),
+        'owned_orgs', (select count(*) from public.org_members where user_id = owner and role = 'owner')
     );
+$$;
+
+create or replace function public.org_usage(org uuid) returns jsonb
+language sql stable security definer set search_path = public, pg_temp as $$
+    select jsonb_build_object(
+        'projects', (select count(*) from public.projects p join public.workspaces w on w.id = p.workspace_id
+                     where w.org_id = org and p.deleted_at is null),
+        'bytes', (select coalesce(sum(p.size), 0) from public.projects p join public.workspaces w on w.id = p.workspace_id
+                  where w.org_id = org),
+        'people', (select count(*) from public.org_members where org_id = org),
+        'pending', (select count(*) from public.invites i where i.org_id = org and i.accepted_at is null
+                    and i.declined_at is null and i.revoked_at is null and i.expires_at > now()),
+        'spaces', (select count(*) from public.workspaces where org_id = org and archived_at is null)
+    );
+$$;
+
+create or replace function public.usage_for(ws uuid) returns jsonb
+language sql stable security definer set search_path = public, pg_temp as $$
+    select case when w.org_id is null then public.account_usage(w.owner_id) else public.org_usage(w.org_id) end
+    from public.workspaces w where w.id = ws;
 $$;
 
 create or replace function public.bump_rate(what text, per_minute int) returns void
@@ -71,7 +97,13 @@ begin
         'avatar_hue', pr.avatar_hue,
         'plan', to_jsonb(pl),
         'usage', public.account_usage(me),
-        'personal_workspace', (select id from public.workspaces where owner_id = me and kind = 'personal')
+        'personal_workspace', (select id from public.workspaces where owner_id = me and kind = 'personal'),
+        'staff', (select role from public.staff where user_id = me),
+        'orgs', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'name', o.name, 'slug', o.slug, 'role', m.role,
+                                                               'plan', o.plan_id, 'trial_ends_at', o.trial_ends_at,
+                                                               'suspended', o.suspended_at is not null) order by o.name)
+                          from public.org_members m join public.organizations o on o.id = m.org_id
+                          where m.user_id = me), '[]'::jsonb)
     );
 end;
 $$;

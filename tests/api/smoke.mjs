@@ -49,9 +49,12 @@ ok(weak.status >= 400, "short passwords are refused");
 const me = await rpc("me", ann.access_token);
 ok(me.status === 200 && me.data.display_name, "me() answers over HTTP");
 
-const team = await rpc("create_workspace", ann.access_token, { name: "Smoke Room" });
-ok(team.status === 200, "a team is created over HTTP");
-const invite = await rpc("invite_member", ann.access_token, { ws: team.data, email: `ben.${stamp}@example.com`, role: "editor" });
+const org = await rpc("create_org", ann.access_token, { name: "Smoke Room" });
+ok(org.status === 200 && String(org.data.slug).startsWith("smoke-room"), "an organization is created over HTTP");
+const team = { data: org.data.space };
+const bySlug = await rpc("org_by_slug", ann.access_token, { slug: org.data.slug });
+ok(bySlug.status === 200 && bySlug.data.plan.id === "team", "it is found by its slug, on the Team plan");
+const invite = await rpc("invite_member", ann.access_token, { org: org.data.id, email: `ben.${stamp}@example.com`, role: "member" });
 ok(invite.status === 200, "an invite is sent");
 const mine = await rpc("my_invites", ben.access_token);
 ok(Array.isArray(mine.data) && mine.data.length === 1, "the invitee sees it");
@@ -95,6 +98,42 @@ if (gone.status === 404 || gone.status === 503) {
   ok(gone.status === 200 && gone.data.deleted, "a fresh session deletes its own account");
   const after = await call("/auth/v1/token?grant_type=password", { method: "POST", body: { email: `carl.${stamp}@example.com`, password: "Correct-Horse-9" } });
   ok(after.status >= 400, "and that account can no longer sign in");
+}
+
+const served = (await call("/functions/v1/app-token", { method: "POST", body: {} })).status !== 404;
+if (!served) {
+  console.log("skip app sign-in: functions are not served here");
+} else {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const verifier = Buffer.from(bytes).toString("base64url");
+  const challenge = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))).toString("base64url");
+  const granted = await rpc("create_app_grant", ben.access_token, { app: "blackline", device: "Ben's PC", challenge });
+  ok(granted.status === 200 && /^[A-Z2-9]{8}$/.test(granted.data), "the web makes a one-time sign-in code for an app");
+  const wrong = await call("/functions/v1/app-token", { method: "POST", body: { code: granted.data, verifier: "x".repeat(43) } });
+  ok(wrong.status === 400 && wrong.data.error === "nc:forbidden", "the code is useless without the app's verifier");
+  const app = await call("/functions/v1/app-token", { method: "POST", body: { code: granted.data, verifier } });
+  ok(app.status === 200 && app.data.access_token && app.data.refresh_token, "the app trades code and verifier for its own session");
+  const appMe = await rpc("me", app.data.access_token);
+  ok(appMe.status === 200 && appMe.data.id === ben.user.id, "and that session is Ben's");
+  const again = await call("/functions/v1/app-token", { method: "POST", body: { code: granted.data, verifier } });
+  ok(again.status === 400, "a code works once");
+
+  const link = await call("/functions/v1/web-link", { token: app.data.access_token, method: "POST", body: { next: "/o/smoke-room/members" } });
+  ok(link.status === 200 && link.data.url.includes("/auth/handoff#t="), "an app asks for a link that opens the web signed in");
+  const hash = new URL(link.data.url).hash.slice(1);
+  const params = new URLSearchParams(hash);
+  ok(params.get("next") === "/o/smoke-room/members", "the link keeps the page to open");
+  const evil = await call("/functions/v1/web-link", { token: app.data.access_token, method: "POST", body: { next: "https://evil.example" } });
+  ok(new URLSearchParams(new URL(evil.data.url).hash.slice(1)).get("next") === "/", "and never sends anyone off the panel");
+  const web = await call("/functions/v1/app-token", { method: "POST", body: { code: params.get("t") } });
+  ok(web.status === 200 && web.data.access_token && web.data.app === "web", "the web redeems the link for a session");
+
+  const staffed = await call("/rest/v1/staff", { token: SERVICE, key: SERVICE, method: "POST", body: { user_id: ann.user.id, role: "admin" } });
+  ok(staffed.status === 201, "staff are added by the operator");
+  const stats = await rpc("staff_stats", ann.access_token);
+  ok(stats.status === 200 && stats.data.users >= 3, "staff see platform numbers");
+  const hidden = await rpc("staff_stats", ben.access_token);
+  ok(hidden.status >= 400, "everyone else is refused");
 }
 
 console.log(`${checks} checks passed`);

@@ -37,8 +37,8 @@ enabled = false
 
 [auth]
 enabled = true
-site_url = "https://nativecompute.net"
-additional_redirect_urls = []
+site_url = "https://cloud.nativecompute.net"
+additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
@@ -82,3 +82,12 @@ verify_jwt = true
 
 [functions.delete-account]
 verify_jwt = true
+
+[functions.web-link]
+verify_jwt = true
+
+[functions.staff-delete-user]
+verify_jwt = true
+
+[functions.app-token]
+verify_jwt = false

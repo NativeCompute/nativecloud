@@ -1,7 +1,7 @@
 begin;
 
 select tests.act_admin();
-update public.plans set max_projects = 3, max_bytes = 1000, max_kept_snapshots = 2, max_saves_per_minute = 5 where id = 'free_beta';
+update public.plans set max_projects = 3, max_bytes = 1000, max_kept_snapshots = 2, max_saves_per_minute = 5 where id = 'free';
 create temp table ids as select tests.new_user('max@example.com') as max, tests.new_user('heir@example.com') as heir,
                                tests.new_user('solo@example.com') as solo;
 create temp table pr (id uuid);
@@ -32,17 +32,18 @@ select public.save_project((select id from pr), 4, 'a4');
 select public.save_project((select id from pr), 5, 'a5');
 select tests.fails($$select public.save_project((select id from pr), 6, 'a6')$$, 'nc:rate', 'saving is rate limited per minute');
 
-insert into ws (id) select public.create_workspace('Max Team');
-select public.invite_member((select id from ws), 'heir@example.com', 'editor');
+insert into ws (id) select (public.create_org('Max Team') ->> 'id')::uuid;
+select public.invite_member((select id from ws), 'heir@example.com', 'member');
 select tests.act_as((select heir from ids));
 select public.accept_invite((select x ->> 'id' from public.my_invites() x)::uuid);
 select tests.act_as((select max from ids));
-update ws set solo = public.create_workspace('Lonely');
+update ws set solo = (public.create_org('Lonely') ->> 'id')::uuid;
 
 select tests.act_admin();
-select tests.eq(public.prepare_account_deletion((select max from ids)), '{"deleted": 1, "transferred": 1}'::jsonb, 'deleting an account hands teams on and drops empty ones');
-select tests.eq((select owner_id from public.workspaces where id = (select id from ws)), (select heir from ids), 'the team goes to the next member');
-select tests.eq((select count(*)::int from public.workspaces where id = (select solo from ws)), 0, 'a team of one goes with its owner');
+select tests.eq(public.prepare_account_deletion((select max from ids)), '{"deleted": 1, "transferred": 1}'::jsonb, 'deleting an account hands organizations on and drops empty ones');
+select tests.eq((select user_id from public.org_members where org_id = (select id from ws) and role = 'owner'), (select heir from ids), 'the organization goes to the next member');
+select tests.eq((select count(*)::int from public.organizations where id = (select solo from ws)), 0, 'an organization of one goes with its owner');
+select tests.eq((select count(*)::int from public.workspaces where org_id = (select solo from ws)), 0, 'with its spaces');
 delete from auth.users where id = (select max from ids);
 select tests.eq((select count(*)::int from public.projects where created_by is null and workspace_id not in (select id from public.workspaces)), 0, 'nothing is left behind');
 select tests.eq((select count(*)::int from public.profiles where id = (select max from ids)), 0, 'the profile is gone');

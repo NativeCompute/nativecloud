@@ -15,8 +15,11 @@
 4. **Email templates.** Paste the three files from `supabase/templates/` into Authentication → Emails → Templates (Confirm signup, Reset password, Change email). They send codes, not links, so no website is needed.
 5. **Edge Function secrets** (Edge Functions → Secrets):
    - `RESEND_API_KEY` (the same key);
-   - `INVITE_FROM` = `NativeCloud <cloud@nativecompute.net>`.
-6. **GitHub secrets on this repo** (Settings → Secrets and variables → Actions):
+   - `INVITE_FROM` = `NativeCloud <cloud@nativecompute.net>`;
+   - `NATIVECLOUD_WEB_URL` = `https://cloud.nativecompute.net`;
+   - `NATIVECLOUD_WEB_ORIGINS` = extra origins allowed to call the functions from a browser, comma-separated (for example a Cloudflare Pages preview URL).
+6. **Auth URLs** (Authentication → URL Configuration): Site URL `https://cloud.nativecompute.net`.
+7. **GitHub secrets on this repo** (Settings → Secrets and variables → Actions):
 
    | Secret | From |
    |---|---|
@@ -27,8 +30,9 @@
    | `SUPABASE_DB_URL` | Project Settings → Database → Connection string (session pooler) |
    | `BACKUP_AGE_PUBLIC_KEY` | `age-keygen -o nativecloud-backup.key` on your computer. Keep the key file safe and offline; paste only the `age1…` public key. |
 
-7. **Deploy.** Actions → Deploy → Run workflow. Later, pushing a `v*` tag deploys.
-8. **Point the apps at it.** The project URL and anon key go into NCF's `CloudConfig` for each app.
+8. **Deploy.** Actions → Deploy → Run workflow. Later, pushing a `v*` tag deploys.
+9. **Make yourself staff.** In the SQL editor: `insert into public.staff values ('<your user id>', 'admin');`
+10. **Point the apps at it.** The project URL and anon key go into NCF's `CloudConfig` for each app.
 
 ## Routine
 - **Keep-alive:** free projects pause after 7 days without traffic. `keepalive.yml` pings twice a week. If a project does pause, restore it from the dashboard; nothing is lost.
@@ -55,4 +59,4 @@ Moving is a button in the dashboard; nothing in the apps or this repo changes.
 ## Incidents
 - **Leaked service key:** roll the key in Project Settings → API, update the Edge Function secrets and GitHub secrets, then redeploy.
 - **Bad migration:** never edit an applied migration; add a new one that fixes forward. For data loss, restore the latest backup into a new project and copy the affected rows back.
-- **Abuse:** set the account's plan to a zero-limit plan, or delete the user in Authentication → Users. Deleting their auth user removes their data.
+- **Abuse:** suspend the account or the organization from the staff console. If needed, delete the account there too; that removes the person's data.

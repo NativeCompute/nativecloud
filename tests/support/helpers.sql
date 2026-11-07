@@ -22,6 +22,15 @@ begin
 end;
 $$;
 
+create or replace function tests.signed_in_ago(seconds int) returns void
+language plpgsql as $$
+begin
+    perform set_config('request.jwt.claims',
+        (coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+         || jsonb_build_object('iat', extract(epoch from now())::bigint - seconds))::text, false);
+end;
+$$;
+
 create or replace function tests.act_anon() returns void
 language plpgsql as $$
 begin

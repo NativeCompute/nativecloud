@@ -3,19 +3,28 @@ create extension if not exists pgcrypto;
 create table public.plans (
     id text primary key,
     name text not null,
+    scope text not null check (scope in ('personal', 'org')),
+    max_people int not null,
+    max_spaces int not null,
     max_projects int not null,
-    max_owned_teams int not null,
-    max_members int not null,
+    max_bytes bigint not null,
+    max_owned_orgs int not null,
     max_auto_snapshots int not null,
     max_kept_snapshots int not null,
-    max_bytes bigint not null,
     max_saves_per_minute int not null,
-    paid boolean not null default false
+    trial_days int not null default 0,
+    price_cents int not null default 0,
+    paid boolean not null default false,
+    rank int not null default 0
 );
 
-insert into public.plans values
-    ('free_beta', 'Free beta', 50, 3, 10, 30, 20, 104857600, 30, false),
-    ('pro', 'Pro', 1000, 20, 50, 60, 200, 2147483648, 120, true);
+insert into public.plans
+    (id, name, scope, max_people, max_spaces, max_projects, max_bytes, max_owned_orgs,
+     max_auto_snapshots, max_kept_snapshots, max_saves_per_minute, trial_days, price_cents, paid, rank) values
+    ('free', 'Free', 'personal', 1, 1, 50, 104857600, 3, 30, 20, 30, 0, 0, false, 0),
+    ('team', 'Team', 'org', 10, 5, 500, 2147483648, 0, 30, 50, 60, 30, 1900, true, 1),
+    ('studio', 'Studio', 'org', 50, 1000, 5000, 21474836480, 0, 60, 200, 120, 0, 7900, true, 2),
+    ('enterprise', 'Enterprise', 'org', 10000, 100000, 1000000, 1099511627776, 0, 90, 1000, 240, 0, 0, true, 3);
 
 create table public.apps (
     id text primary key check (id ~ '^[a-z][a-z0-9-]{1,30}$'),
@@ -28,25 +37,61 @@ create table public.profiles (
     id uuid primary key references auth.users (id) on delete cascade,
     display_name text not null default '' check (char_length(display_name) <= 80),
     avatar_hue int not null default (floor(random() * 360))::int check (avatar_hue between 0 and 359),
-    plan_id text not null default 'free_beta' references public.plans (id),
+    plan_id text not null default 'free' references public.plans (id),
+    suspended_at timestamptz,
+    suspended_reason text not null default '',
     created_at timestamptz not null default now()
+);
+
+create table public.organizations (
+    id uuid primary key default gen_random_uuid(),
+    name text not null check (char_length(btrim(name)) between 1 and 80),
+    slug text not null unique check (slug ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'),
+    plan_id text not null default 'team' references public.plans (id),
+    trial_ends_at timestamptz,
+    settings jsonb not null default '{"members_create_spaces": true}'::jsonb check (octet_length(settings::text) <= 4096),
+    suspended_at timestamptz,
+    suspended_reason text not null default '',
+    created_by uuid,
+    created_at timestamptz not null default now()
+);
+
+create table public.org_members (
+    org_id uuid not null references public.organizations (id) on delete cascade,
+    user_id uuid not null references public.profiles (id) on delete cascade,
+    role text not null check (role in ('owner', 'admin', 'member', 'guest')),
+    joined_at timestamptz not null default now(),
+    primary key (org_id, user_id)
+);
+
+create index org_members_user on public.org_members (user_id);
+create unique index org_members_one_owner on public.org_members (org_id) where role = 'owner';
+
+create table public.org_slugs (
+    slug text primary key,
+    org_id uuid not null references public.organizations (id) on delete cascade,
+    retired_at timestamptz not null default now()
 );
 
 create table public.workspaces (
     id uuid primary key default gen_random_uuid(),
     name text not null check (char_length(btrim(name)) between 1 and 80),
-    kind text not null check (kind in ('personal', 'team')),
-    owner_id uuid not null references public.profiles (id) on delete cascade,
-    created_at timestamptz not null default now()
+    kind text not null check (kind in ('personal', 'space')),
+    owner_id uuid references public.profiles (id) on delete cascade,
+    org_id uuid references public.organizations (id) on delete cascade,
+    archived_at timestamptz,
+    created_at timestamptz not null default now(),
+    check ((kind = 'personal' and owner_id is not null and org_id is null)
+        or (kind = 'space' and owner_id is null and org_id is not null))
 );
 
 create unique index workspaces_one_personal on public.workspaces (owner_id) where kind = 'personal';
-create index workspaces_owner on public.workspaces (owner_id);
+create index workspaces_org on public.workspaces (org_id);
 
 create table public.memberships (
     workspace_id uuid not null references public.workspaces (id) on delete cascade,
     user_id uuid not null references public.profiles (id) on delete cascade,
-    role text not null check (role in ('owner', 'admin', 'editor', 'viewer')),
+    role text not null check (role in ('owner', 'editor', 'viewer')),
     joined_at timestamptz not null default now(),
     primary key (workspace_id, user_id)
 );
@@ -56,9 +101,11 @@ create unique index memberships_one_owner on public.memberships (workspace_id) w
 
 create table public.invites (
     id uuid primary key default gen_random_uuid(),
-    workspace_id uuid not null references public.workspaces (id) on delete cascade,
+    org_id uuid not null references public.organizations (id) on delete cascade,
     email text not null check (email = lower(btrim(email)) and email like '%_@_%'),
-    role text not null check (role in ('admin', 'editor', 'viewer')),
+    role text not null check (role in ('admin', 'member', 'guest')),
+    spaces uuid[] not null default '{}',
+    space_role text not null default 'editor' check (space_role in ('editor', 'viewer')),
     invited_by uuid,
     created_at timestamptz not null default now(),
     expires_at timestamptz not null default now() + interval '14 days',
@@ -67,7 +114,7 @@ create table public.invites (
     revoked_at timestamptz
 );
 
-create unique index invites_one_pending on public.invites (workspace_id, email)
+create unique index invites_one_pending on public.invites (org_id, email)
     where accepted_at is null and declined_at is null and revoked_at is null;
 create index invites_email on public.invites (email);
 
@@ -154,7 +201,8 @@ create table public.app_settings (
 
 create table public.changes (
     seq bigint generated always as identity primary key,
-    workspace_id uuid not null references public.workspaces (id) on delete cascade,
+    workspace_id uuid references public.workspaces (id) on delete cascade,
+    org_id uuid references public.organizations (id) on delete cascade,
     project_id uuid,
     kind text not null,
     by uuid,
@@ -162,10 +210,12 @@ create table public.changes (
 );
 
 create index changes_workspace on public.changes (workspace_id, seq);
+create index changes_org on public.changes (org_id, seq);
 
 create table public.audit (
     id bigint generated always as identity primary key,
     workspace_id uuid references public.workspaces (id) on delete set null,
+    org_id uuid references public.organizations (id) on delete set null,
     actor uuid,
     action text not null,
     detail jsonb not null default '{}'::jsonb,
@@ -173,6 +223,7 @@ create table public.audit (
 );
 
 create index audit_workspace on public.audit (workspace_id, at desc);
+create index audit_org on public.audit (org_id, at desc);
 
 create table public.rate (
     user_id uuid not null references public.profiles (id) on delete cascade,
@@ -181,3 +232,24 @@ create table public.rate (
     n int not null default 0,
     primary key (user_id, kind, bucket)
 );
+
+create table public.staff (
+    user_id uuid primary key references public.profiles (id) on delete cascade,
+    role text not null check (role in ('support', 'admin')),
+    created_at timestamptz not null default now()
+);
+
+create table public.app_grants (
+    id uuid primary key default gen_random_uuid(),
+    code_hash text not null unique,
+    user_id uuid not null references public.profiles (id) on delete cascade,
+    app_id text not null,
+    device_name text not null default '' check (char_length(device_name) <= 80),
+    challenge text,
+    attempts int not null default 0,
+    expires_at timestamptz not null,
+    used_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+create index app_grants_user on public.app_grants (user_id, created_at desc);

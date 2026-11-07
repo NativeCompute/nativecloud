@@ -9,12 +9,14 @@ select tests.eq((select display_name from public.profiles where id = (select bob
 select tests.eq((select count(*)::int from public.workspaces where owner_id = (select ada from ids) and kind = 'personal'), 1, 'every account gets one personal space');
 select tests.eq((select role from public.memberships m join public.workspaces w on w.id = m.workspace_id
                  where w.owner_id = (select ada from ids)), 'owner', 'and owns it');
-select tests.eq((select plan_id from public.profiles where id = (select ada from ids)), 'free_beta', 'new accounts start on the free beta');
+select tests.eq((select plan_id from public.profiles where id = (select ada from ids)), 'free', 'new accounts start on the free plan');
 
 select tests.act_as((select ada from ids));
 select tests.eq((public.me() ->> 'email'), 'ada@example.com', 'me() knows who you are');
 select tests.eq((public.me() -> 'usage' ->> 'projects')::int, 0, 'and that nothing is used yet');
 select tests.eq((public.me() -> 'plan' ->> 'max_projects')::int, 50, 'and the plan limits');
+select tests.eq(jsonb_array_length(public.me() -> 'orgs'), 0, 'and that you are in no organization yet');
+select tests.eq(public.me() ->> 'staff', null, 'and that you are not staff');
 select public.update_profile('Ada L.', 200);
 select tests.eq((select display_name from public.profiles where id = (select ada from ids)), 'Ada L.', 'you can rename yourself');
 select tests.fails($$select public.update_profile('   ')$$, 'nc:invalid:name', 'but not to nothing');

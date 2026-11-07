@@ -12,9 +12,9 @@ create temp table seen (n bigint);
 grant select, insert, update, delete on ids, ws, pr, seen to authenticated;
 
 select tests.act_as((select ann from ids));
-insert into ws select public.create_workspace('Writers Room');
-select public.invite_member((select id from ws), 'ben@example.com', 'editor');
-select public.invite_member((select id from ws), 'vic@example.com', 'viewer');
+insert into ws select (public.create_org('Writers Room') ->> 'space')::uuid;
+select public.invite_member(public.space_org((select id from ws)), 'ben@example.com', 'member');
+select public.invite_member(public.space_org((select id from ws)), 'vic@example.com', 'guest', array[(select id from ws)], 'viewer');
 select tests.act_as((select ben from ids));
 select public.accept_invite((select x ->> 'id' from public.my_invites() x)::uuid);
 select tests.act_as((select vic from ids));

@@ -61,11 +61,16 @@ begin
 end;
 $$;
 
-create or replace function public.check_room(owner uuid, more_projects int, more_bytes bigint) returns void
+create or replace function public.bill_of(ws uuid) returns uuid
+language sql stable security definer set search_path = public, pg_temp as $$
+    select coalesce(org_id, owner_id) from public.workspaces where id = ws;
+$$;
+
+create or replace function public.check_room(ws uuid, more_projects int, more_bytes bigint) returns void
 language plpgsql stable security definer set search_path = public, pg_temp as $$
 declare
-    pl public.plans := public.plan_of(owner);
-    used jsonb := public.account_usage(owner);
+    pl public.plans := public.plan_for(ws);
+    used jsonb := public.usage_for(ws);
 begin
     if more_projects > 0 and (used ->> 'projects')::int + more_projects > pl.max_projects then
         raise exception 'nc:limit:projects' using errcode = 'P0001';
@@ -107,7 +112,7 @@ $$;
 create or replace function public.keep_auto(p uuid, body text, version bigint) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
-    keep int := (public.plan_of(public.owner_of(public.project_workspace(p)))).max_auto_snapshots;
+    keep int := (public.plan_for(public.project_workspace(p))).max_auto_snapshots;
 begin
     if exists (select 1 from public.project_versions v where v.project_id = p and v.kind = 'auto'
                and v.created_at > now() - interval '10 minutes') then
@@ -134,7 +139,7 @@ begin
     if not exists (select 1 from public.apps a where a.id = create_project.app_id) then
         raise exception 'nc:invalid:app' using errcode = 'P0001';
     end if;
-    perform public.check_room(public.owner_of(ws), 1, octet_length(coalesce(body, '')));
+    perform public.check_room(ws, 1, octet_length(coalesce(body, '')));
     insert into public.projects (workspace_id, app_id, title, body, meta, created_by, updated_by)
     values (ws, create_project.app_id, left(coalesce(title, ''), 200), coalesce(body, ''), coalesce(meta, '{}'::jsonb), me, me)
     returning * into row;
@@ -240,7 +245,7 @@ begin
     if row.deleted_at is not null then
         raise exception 'nc:not_found' using errcode = 'P0001';
     end if;
-    pl := public.plan_of(public.owner_of(row.workspace_id));
+    pl := public.plan_for(row.workspace_id);
     perform public.bump_rate('save', pl.max_saves_per_minute);
     if held.project_id is not null and not (held.user_id = me and (save_project.device_id is null or held.device_id = save_project.device_id)) then
         return jsonb_build_object('status', 'locked', 'lease', public.lease_json(held), 'version', row.version);
@@ -249,7 +254,7 @@ begin
         return jsonb_build_object('status', 'conflict', 'project', public.project_json(row, true));
     end if;
     if octet_length(body) > row.size then
-        perform public.check_room(public.owner_of(row.workspace_id), 0, octet_length(body) - row.size);
+        perform public.check_room(row.workspace_id, 0, octet_length(body) - row.size);
     end if;
     update public.projects
        set body = save_project.body,
@@ -276,7 +281,7 @@ language plpgsql security definer set search_path = public, pg_temp as $$
 declare
     me uuid := public.nc_uid();
     row public.projects := public.load_project(p, false);
-    pl public.plans := public.plan_of(public.owner_of(row.workspace_id));
+    pl public.plans := public.plan_for(row.workspace_id);
     made uuid;
 begin
     perform public.need_write(row.workspace_id);
@@ -357,7 +362,7 @@ begin
     if row.deleted_at is null then
         return;
     end if;
-    perform public.check_room(public.owner_of(row.workspace_id), 1, 0);
+    perform public.check_room(row.workspace_id, 1, 0);
     update public.projects set deleted_at = null, deleted_by = null where id = p;
     perform public.note_change(row.workspace_id, p, 'project');
 end;
@@ -390,8 +395,8 @@ begin
     if row.workspace_id = to_workspace then
         return;
     end if;
-    if public.owner_of(to_workspace) <> public.owner_of(row.workspace_id) then
-        perform public.check_room(public.owner_of(to_workspace), case when row.deleted_at is null then 1 else 0 end, row.size);
+    if public.bill_of(to_workspace) <> public.bill_of(row.workspace_id) then
+        perform public.check_room(to_workspace, case when row.deleted_at is null then 1 else 0 end, row.size);
     end if;
     delete from public.leases where project_id = p;
     update public.projects set workspace_id = to_workspace where id = p;
@@ -433,10 +438,12 @@ begin
         'latest', (select coalesce(max(seq), 0) from public.changes),
         'oldest', (select coalesce(min(seq), 0) from public.changes),
         'changes', coalesce((
-            select jsonb_agg(jsonb_build_object('seq', c.seq, 'workspace_id', c.workspace_id, 'project_id', c.project_id,
+            select jsonb_agg(jsonb_build_object('seq', c.seq, 'workspace_id', c.workspace_id, 'org_id', c.org_id, 'project_id', c.project_id,
                                                 'kind', c.kind, 'by', c.by, 'at', c.at) order by c.seq)
             from (select * from public.changes ch
-                  where ch.seq > since and ch.workspace_id in (select workspace_id from public.memberships where user_id = me)
+                  where ch.seq > since
+                    and (ch.workspace_id in (select workspace_id from public.memberships where user_id = me)
+                         or ch.org_id in (select org_id from public.org_members where user_id = me))
                   order by ch.seq limit 1000) c), '[]'::jsonb)
     );
 end;

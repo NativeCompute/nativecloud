@@ -1,11 +1,9 @@
-import { bearer, claims, env, json, rest, serviceRpc } from "../_shared/supabase.ts";
+import { bearer, claims, env, json, rest, serve, serviceRpc } from "../_shared/supabase.ts";
 
 const FRESH_SECONDS = 600;
 
-Deno.serve(async (req) => {
-  if (req.method !== "POST") return json(405, { error: "nc:method" });
+serve(async (req) => {
   const token = bearer(req);
-
   const who = await rest("/auth/v1/user", token, { method: "GET" });
   if (!who.ok) return json(401, { error: "nc:auth" });
   const user = await who.json();
@@ -27,5 +25,5 @@ Deno.serve(async (req) => {
     },
   });
   if (!removed.ok) return json(500, { error: "nc:server" });
-  return json(200, { deleted: true, teams: summary });
+  return json(200, { deleted: true, orgs: summary });
 });
