@@ -9,9 +9,14 @@ export interface Loaded<T> {
   set: (v: T) => void;
 }
 
+interface Held<T> {
+  from: unknown;
+  data: T | undefined;
+  error: ApiError | null;
+}
+
 export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): Loaded<T> {
-  const [data, setData] = useState<T | undefined>(undefined);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [held, setHeld] = useState<Held<T>>({ from: null, data: undefined, error: null });
   const [loading, setLoading] = useState(true);
   const turn = useRef(0);
   const reload = useCallback(async () => {
@@ -19,19 +24,22 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): Loaded<T> {
     setLoading(true);
     try {
       const v = await load();
-      if (mine === turn.current) {
-        setData(v);
-        setError(null);
-      }
+      if (mine === turn.current) setHeld({ from: reload, data: v, error: null });
     } catch (e) {
-      if (mine === turn.current) setError(toError(e));
+      if (mine === turn.current) setHeld((h) => ({ from: reload, data: h.from === reload ? h.data : undefined, error: toError(e) }));
     } finally {
       if (mine === turn.current) setLoading(false);
     }
   }, deps);
   useEffect(() => {
-    setData(undefined);
     reload();
   }, [reload]);
-  return { data, error, loading, reload, set: setData };
+  const current = held.from === reload;
+  return {
+    data: current ? held.data : undefined,
+    error: current ? held.error : null,
+    loading: loading || !current,
+    reload,
+    set: (v: T) => setHeld({ from: reload, data: v, error: null }),
+  };
 }

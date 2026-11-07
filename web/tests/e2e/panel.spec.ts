@@ -39,11 +39,14 @@ test("signing up with the emailed code, then an organization, an invite and a ro
   await other.close();
 
   await page.reload();
+  await expect(page.getByRole("region", { name: "People" })).toBeVisible();
   await page.getByLabel("Role for Eve Stone").selectOption("admin");
   await expect(page.getByText("Eve Stone is an admin now.")).toBeVisible();
 
   await page.goto(`/o/${slug}/spaces`);
+  await expect(page.getByRole("region", { name: "1 space" })).toBeVisible();
   await page.getByLabel("New space").fill("Season 2");
+  await expect(page.getByRole("button", { name: "Create space" })).toBeEnabled();
   await page.getByRole("button", { name: "Create space" }).click();
   await expect(page.getByText("Season 2", { exact: true })).toBeVisible();
 });
@@ -136,6 +139,7 @@ test("the staff console is for staff only", async ({ page }) => {
   await makeStaff(fay);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Staff console" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "People" })).toBeVisible();
   await page.getByLabel("Search people and organizations").fill(org.body.slug);
   await page.getByRole("link", { name: /Staff check/ }).click();
   await page.getByLabel("Plan", { exact: true }).selectOption("studio");

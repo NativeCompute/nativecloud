@@ -28,3 +28,5 @@
 .history > li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s-2); padding-block: var(--s-3); border-bottom: 1px solid var(--line); }
 .splash { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; }
 .table .act .actions { flex-wrap: nowrap; justify-content: flex-end; gap: var(--s-1); }
+.btn:disabled, .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled::before { display: none; }
