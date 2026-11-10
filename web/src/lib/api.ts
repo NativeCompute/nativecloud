@@ -345,9 +345,12 @@ export const api = {
     rpc<Saved>("restore_snapshot", { snapshot, base_version, device_id: null }),
 
   createAppGrant: (app: string, device: string, challenge: string) => rpc<string>("create_app_grant", { app, device, challenge }),
-  redeemHandoff: async (code: string) => {
+  takeHandoff: async (code: string) => {
     const s = await fn<Session & { app?: string }>("app-token", { code });
     if (!s?.access_token || !s.refresh_token) throw new ApiError("nc:invalid:code");
+    return s;
+  },
+  useHandoff: async (s: Session) => {
     const { error } = await sb.auth.setSession({ access_token: s.access_token, refresh_token: s.refresh_token });
     if (error) throw toError(error);
   },

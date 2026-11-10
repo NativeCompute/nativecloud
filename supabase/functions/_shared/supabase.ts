@@ -1,7 +1,7 @@
 export const env = (name: string): string => Deno.env.get(name) ?? "";
 
 export const json = (status: number, body: unknown): Response =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
 export const bearer = (req: Request): string => (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
 
@@ -41,8 +41,12 @@ export function claims(token: string): Record<string, unknown> {
 
 export function signedInAt(c: Record<string, unknown>): number {
   const amr = Array.isArray(c.amr) ? c.amr : [];
-  const times = amr.map((a) => Number((a as Record<string, unknown>)?.timestamp)).filter((t) => Number.isFinite(t) && t > 0);
-  return times.length ? Math.max(...times) : Number(c.iat ?? 0);
+  const times = amr
+    .map((a) => a as Record<string, unknown>)
+    .filter((a) => a?.method === "password" || a?.method === "totp")
+    .map((a) => Number(a.timestamp))
+    .filter((t) => Number.isFinite(t) && t > 0);
+  return times.length ? Math.max(...times) : 0;
 }
 
 export const webUrl = (): string => (env("NATIVECLOUD_WEB_URL") || "https://cloud.nativecompute.net").replace(/\/+$/, "");

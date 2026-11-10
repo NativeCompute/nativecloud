@@ -270,7 +270,7 @@ export function Computers() {
     <Page
       eyebrow="My cloud"
       title="Computers"
-      sub="Every computer an app signed in on. Forgetting one takes it off this list; to stop it syncing, sign out everywhere."
+      sub="Every computer an app signed in on. Signing one out stops it syncing until someone signs in there again."
       action={
         <Button
           kind="ghost"
@@ -320,7 +320,7 @@ export function Computers() {
                       kind="quiet"
                       small
                       onClick={async () => {
-                        if (!(await confirm({ title: `Forget ${d.name}?`, body: "It disappears from this list. It keeps syncing until you sign out everywhere.", yes: "Forget" })))
+                        if (!(await confirm({ title: `Sign out ${d.name}?`, body: "Its apps stop syncing within the hour and leave this list. Copies on that computer stay.", yes: "Sign out", danger: true })))
                           return;
                         try {
                           await api.forgetDevice(d.id);
@@ -330,7 +330,7 @@ export function Computers() {
                         }
                       }}
                     >
-                      Forget
+                      Sign out
                     </Button>
                   </td>
                 </tr>

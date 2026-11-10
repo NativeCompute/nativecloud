@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import type { Session } from "@supabase/supabase-js";
 import { useLocation, useRoute } from "preact-iso";
 import { AuthLayout } from "../ui/auth";
 import { Button, Skeleton } from "../ui/kit";
@@ -7,7 +8,7 @@ import { useSession } from "../lib/session";
 import { appRequest, handoff, loopback, query, withNext, type AppRequest } from "../lib/nav";
 import { grantCode } from "../lib/format";
 import { toError, type ApiError } from "../lib/errors";
-import { fail, toast } from "../ui/overlay";
+import { fail, fresh, toast } from "../ui/overlay";
 
 const remembered = (state: string): string | null => {
   try {
@@ -32,6 +33,7 @@ export function AppLogin() {
   const [appName, setAppName] = useState("");
   const [code, setCode] = useState<string | null>(() => (req ? remembered(req.state) : null));
   const [busy, setBusy] = useState(false);
+  const [showCode, setShowCode] = useState(false);
 
   useEffect(() => {
     if (!req || !ready || session) return;
@@ -70,7 +72,8 @@ export function AppLogin() {
   const allow = async () => {
     setBusy(true);
     try {
-      const c = await api.createAppGrant(req.app, req.device, req.challenge);
+      const c = await fresh(() => api.createAppGrant(req.app, req.device, req.challenge));
+      if (c === undefined) return;
       remember(req.state, c);
       setCode(c);
       setTimeout(() => go({ code: c }), 250);
@@ -84,12 +87,21 @@ export function AppLogin() {
     return (
       <AuthLayout title={`Back to ${name}`} eyebrow="NativeCloud / Sign in to an app">
         <p class="sec">
-          Your browser is handing you back to {name}. If {name} doesn't say you're signed in, type this code there:
+          Your browser is handing you back to {name}, signed in as <strong>{me.email}</strong>.
         </p>
-        <div class="code-box" aria-label="Sign-in code">
-          {grantCode(code)}
-        </div>
-        <p class="hud">It works once, for two minutes</p>
+        {showCode ? (
+          <>
+            <p class="sec">Type this code into {name} on this computer. Never give it to anyone or type it into a website: it signs in as you.</p>
+            <div class="code-box" aria-label="Sign-in code">
+              {grantCode(code)}
+            </div>
+            <p class="hud">It works once, for two minutes</p>
+          </>
+        ) : (
+          <Button kind="ghost" small onClick={() => setShowCode(true)}>
+            {name} didn't open
+          </Button>
+        )}
         <div class="actions">
           <Button kind="ghost" small onClick={() => go({ code })}>
             Try again
@@ -118,7 +130,9 @@ export function AppLogin() {
           wants to use your NativeCloud account, <strong>{me.email}</strong>.
         </p>
       </div>
-      <p class="sec">It can open, write and sync your scripts, and see the organizations you're in. Only continue if you just chose Sign in in {name}.</p>
+      <p class="sec">
+        It can do what you can do in NativeCloud: open, write and sync your scripts, and manage your organizations. Only continue if you just chose Sign in in {name} on this computer.
+      </p>
       <div class="stack-2">
         <Button kind="primary" block busy={busy} onClick={allow}>
           Continue
@@ -143,8 +157,22 @@ export function AppLogin() {
 
 export function Handoff() {
   const { route } = useLocation();
+  const { session } = useSession();
   const [error, setError] = useState<ApiError | null>(null);
   const [next, setNext] = useState("/");
+  const [pending, setPending] = useState<Session | null>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async (s: Session, to: string) => {
+    setBusy(true);
+    try {
+      await api.useHandoff(s);
+      route(to, true);
+    } catch (e) {
+      setError(toError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     const h = handoff(window.location.hash);
     history.replaceState(null, "", window.location.pathname);
@@ -154,10 +182,38 @@ export function Handoff() {
     }
     setNext(h.next);
     api
-      .redeemHandoff(h.token)
-      .then(() => route(h.next, true))
+      .takeHandoff(h.token)
+      .then((s) => {
+        if (session && session.user.id === s.user.id) return go(s, h.next);
+        setPending(s);
+      })
       .catch((e) => setError(toError(e)));
   }, []);
+  if (pending && !error) {
+    const current = session?.user.email;
+    return (
+      <AuthLayout title="Open NativeCloud?" eyebrow="NativeCloud">
+        <p class="sec">
+          This link opens NativeCloud as <strong>{pending.user.email}</strong>.
+          {current ? (
+            <>
+              {" "}
+              You're signed in here as <strong>{current}</strong>; continuing switches account.
+            </>
+          ) : null}{" "}
+          Only continue if you just chose Manage on the web in one of your apps.
+        </p>
+        <div class="stack-2">
+          <Button kind="primary" block busy={busy} onClick={() => go(pending, next)}>
+            Continue as {pending.user.email}
+          </Button>
+          <a class="btn btn--ghost btn--block" href={current ? "/" : "/sign-in"}>
+            Cancel
+          </a>
+        </div>
+      </AuthLayout>
+    );
+  }
   if (!error) {
     return (
       <AuthLayout title="Signing you in" eyebrow="NativeCloud">

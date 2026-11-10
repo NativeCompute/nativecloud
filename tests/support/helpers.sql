@@ -16,7 +16,8 @@ $$;
 create or replace function tests.act_as(who uuid) returns void
 language plpgsql as $$
 begin
-    perform set_config('request.jwt.claims', jsonb_build_object('sub', who, 'role', 'authenticated')::text, false);
+    perform set_config('request.jwt.claims', jsonb_build_object('sub', who, 'role', 'authenticated',
+        'amr', jsonb_build_array(jsonb_build_object('method', 'password', 'timestamp', extract(epoch from now())::bigint - 3600)))::text, false);
     perform set_config('request.jwt.claim.sub', who::text, false);
     perform set_config('role', 'authenticated', false);
 end;
@@ -30,6 +31,17 @@ begin
          || jsonb_build_object('iat', extract(epoch from now())::bigint,
                                'amr', jsonb_build_array(jsonb_build_object('method', 'password',
                                                         'timestamp', extract(epoch from now())::bigint - seconds))))::text, false);
+end;
+$$;
+
+create or replace function tests.act_as_app(who uuid) returns void
+language plpgsql as $$
+begin
+    perform tests.act_as(who);
+    perform set_config('request.jwt.claims',
+        jsonb_build_object('sub', who, 'role', 'authenticated', 'iat', extract(epoch from now())::bigint,
+                           'session_id', gen_random_uuid(),
+                           'amr', jsonb_build_array(jsonb_build_object('method', 'otp', 'timestamp', extract(epoch from now())::bigint)))::text, false);
 end;
 $$;
 

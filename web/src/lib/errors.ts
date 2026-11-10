@@ -35,6 +35,7 @@ const limit: Record<string, string> = {
   spaces: "This organization has as many spaces as its plan allows.",
   members: "This organization has as many people as its plan allows.",
   snapshots: "This script has as many named snapshots as the plan allows.",
+  devices: "This account is signed in on as many computers as it may be. Sign one out on the Computers page.",
 };
 
 const auth: Record<string, string> = {
@@ -68,6 +69,8 @@ export function messageOf(code: string): string {
       return "Confirm your email first.";
     case "rate":
       return "That was a lot at once. Wait a minute and try again.";
+    case "locked":
+      return "Someone is editing it right now. Try again when they're done.";
     case "reauth":
       return "For your safety, enter your password again first.";
     case "suspended":

@@ -80,6 +80,8 @@ test("an app signs in through /login, once, with its own verifier", async ({ pag
   expect((await redeem(code, p.verifier)).body.error).toBe("nc:not_found");
 
   await page.goBack();
+  await expect(page.locator(".code-box")).toHaveCount(0);
+  await page.getByRole("button", { name: "Blackline didn't open" }).click();
   await expect(page.locator(".code-box")).toHaveText(`${code.slice(0, 4)}-${code.slice(4)}`);
 
   const q = pkce();
@@ -100,6 +102,8 @@ test("Manage on the web signs the app's person in and opens the page", async ({ 
   expect(link.status).toBe(200);
   const hash = new URL(link.body.url).hash;
   await page.goto(`/auth/handoff${hash}`);
+  await expect(page.getByText(ben.email)).toBeVisible();
+  await page.getByRole("button", { name: `Continue as ${ben.email}` }).click();
   await expect(page).toHaveURL(/\/account\/computers$/);
   await expect(page.getByRole("heading", { name: "Computers" })).toBeVisible();
   await page.goto(`/auth/handoff${hash}`);

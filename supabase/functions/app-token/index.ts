@@ -19,5 +19,7 @@ serve(async (req) => {
 
   const session = await sessionFor(String(grant.email));
   if (!session) return json(500, { error: "nc:server" });
+  const minted = (session.user as Record<string, unknown> | undefined)?.id;
+  if (typeof minted !== "string" || minted !== grant.user_id) return json(500, { error: "nc:server" });
   return json(200, { ...session, app: grant.app, device_name: grant.device_name });
 });

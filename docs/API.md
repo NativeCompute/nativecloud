@@ -23,7 +23,8 @@ Functions fail with HTTP 400 and a JSON body whose `message` starts with `nc:`:
 | `nc:suspended` | The account, or the organization, is suspended. |
 | `nc:limit:<what>` | The plan's limit is reached: `projects`, `storage`, `orgs`, `members`, `spaces`, `snapshots`. |
 | `nc:rate` | Too many of this action this minute. Wait and retry. |
-| `nc:reauth` | Sign in again first. Account deletion needs a session less than 10 minutes old. |
+| `nc:reauth` | Sign in again with your password first. Deleting things and handing them over need a password sign-in less than 10 minutes old; approving an app and the staff tools need a session that started with a password. Sessions made for apps or by `web-link` never count. |
+| `nc:locked` | Someone else is editing the script, so it can't be deleted or moved now. |
 
 Expected outcomes aren't errors. Saving into someone else's lock, or saving from an old version, returns a normal `200` result with a `status` field.
 
@@ -38,7 +39,7 @@ People sign in, sign up, confirm their email and reset passwords **on the web**,
 4. The browser goes to `http://127.0.0.1:<port>/callback?code=<code>&state=<state>`. If the app can't be reached that way, the web shows the code to type in.
 5. The app calls `POST /functions/v1/app-token` with `{code, verifier}`. It gets back a normal session (`access_token`, `refresh_token`, `expires_at`, `user`), separate from every other device. A wrong verifier counts as a failed try, and five of them burn the code.
 
-**An app opens the web signed in:** `POST /functions/v1/web-link {next}` returns a URL. Its fragment carries a one-time code, valid for 5 minutes, that the web exchanges at `app-token` with no verifier. `next` is always a path on the panel.
+**An app opens the web signed in:** `POST /functions/v1/web-link {next}` returns a URL. Its fragment carries a 12-character one-time code, valid for 5 minutes, that the web exchanges at `app-token` with no verifier. `next` is always a path on the panel.
 
 ## Accounts (Supabase Auth)
 
@@ -91,7 +92,7 @@ A lease counts only while `expires_at` is in the future; compare against the ser
 | `me` | none | `{id, email, display_name, avatar_hue, plan, usage, personal_workspace, staff, orgs: [{id, name, slug, role, plan, trial_ends_at, suspended}]}` |
 | `update_profile` | `display_name`, `avatar_hue?` | none |
 | `register_device` | `device_id`, `name`, `platform?` | none |
-| `forget_device` | `device_id` | none |
+| `forget_device` | `device_id` | Signs that computer's session out and removes it from the list. |
 | `put_app_settings` | `app_id`, `body` (16 KB max) | none |
 | `usage_summary` | none | `{plan, usage: {projects, bytes, owned_orgs}}` |
 
@@ -141,12 +142,12 @@ These need a row in `staff`, which is added from the SQL editor. Support staff c
 | `renew_lease` | `p`, `device_id` | `{held, version, lease?}`. Call every 30 s while editing. |
 | `release_lease` | `p`, `device_id` | none |
 | `save_project` | `p`, `base_version`, `body`, `title?`, `meta?`, `device_id?` | `{status: "saved", version}`, `{status: "conflict", project}` or `{status: "locked", lease}` |
-| `take_snapshot` | `p`, `label?`, `kind?` (`manual`/`conflict`/`offline`/`revision`/`restore`), `body?` | The snapshot id. A `body` stores that text instead of the current one. |
-| `delete_snapshot` | `snapshot` | none |
+| `take_snapshot` | `p`, `label?`, `kind?` (`manual`/`conflict`/`offline`/`revision`/`restore`), `body?` | The snapshot id. A `body` stores that text instead of the current one. Snapshots count towards the plan's storage; at most 10 safety copies (`conflict`, `offline`, `restore`) are kept per script. |
+| `delete_snapshot` | `snapshot` | Owners and admins, or whoever took that snapshot. Automatic snapshots can only be deleted by owners and admins. |
 | `restore_snapshot` | `snapshot`, `base_version`, `device_id?` | Same as `save_project`. Keeps the replaced text as a `restore` snapshot. |
 | `delete_project` / `restore_project` | `p` | Moves to or from the trash; the trash keeps scripts for 30 days. |
 | `purge_project` | `p` | Deletes a trashed project for good. |
-| `move_project` | `p`, `to_workspace` | Needs write access in both spaces. |
+| `move_project` | `p`, `to_workspace` | Needs write access in both spaces. Taking a script out of an organization needs an owner, an admin or the script's creator, and is written to the organization's audit log. `nc:locked` while someone else edits it. |
 | `duplicate_project` | `p`, `title?` | Project JSON. |
 | `set_star` | `p`, `starred` | none |
 | `changes_since` | `since` | `{latest, oldest, changes: [{seq, workspace_id, org_id, project_id, kind, by, at}]}`. If `since < oldest`, reload everything. |
@@ -161,7 +162,7 @@ The `kind` values in the change feed are `project`, `lease`, `versions`, `member
 ## Edge Functions
 | Endpoint | Body | Notes |
 |---|---|---|
-| `POST /functions/v1/send-invite` | `{invite_id}` | Emails the invite with a link to `/invite/<id>` on the web. The caller must manage the organization. Returns `{sent: false}` if email isn't configured. |
+| `POST /functions/v1/send-invite` | `{invite_id}` | Emails the invite with a link to `/invite/<id>` on the web. The caller must be an owner or admin. Each invite is sent at most 3 times, at least a minute apart, and an organization sends at most 50 invite emails a day (`nc:rate`). Returns `{sent: false}` if email isn't configured. |
 | `POST /functions/v1/app-token` | `{code, verifier?}` | Trades a sign-in code for a session; see Signing in. No session needed. |
-| `POST /functions/v1/web-link` | `{next}` | Returns `{url}`, which opens the web signed in. |
+| `POST /functions/v1/web-link` | `{next}` | Returns `{url}`, which opens the web signed in after the person confirms the account. 10 a minute per account, each written to the audit log. |
 | `POST /functions/v1/delete-account` | none | Needs a session less than 10 minutes old, otherwise `nc:reauth`. Organizations pass to the next admin or member; organizations of one are deleted. |
