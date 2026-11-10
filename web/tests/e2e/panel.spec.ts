@@ -102,7 +102,7 @@ test("Manage on the web signs the app's person in and opens the page", async ({ 
   expect(link.status).toBe(200);
   const hash = new URL(link.body.url).hash;
   await page.goto(`/auth/handoff${hash}`);
-  await expect(page.getByText(ben.email)).toBeVisible();
+  await expect(page.getByText(ben.email, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: `Continue as ${ben.email}` }).click();
   await expect(page).toHaveURL(/\/account\/computers$/);
   await expect(page.getByRole("heading", { name: "Computers" })).toBeVisible();
