@@ -1,0 +1,33 @@
+name: Backup
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Encrypted nightly dump
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      AGE_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Dump and encrypt
+        run: |
+          if [ -z "$DB_URL" ] || [ -z "$AGE_KEY" ]; then echo "SUPABASE_DB_URL or BACKUP_AGE_PUBLIC_KEY not set; skipping"; exit 0; fi
+          sudo apt-get install -y -qq age >/dev/null
+          supabase db dump --db-url "$DB_URL" -f schema.sql
+          supabase db dump --db-url "$DB_URL" --data-only -f data.sql
+          supabase db dump --db-url "$DB_URL" --role-only -f roles.sql
+          tar -czf - schema.sql data.sql roles.sql | age -r "$AGE_KEY" > "nativecloud-$(date -u +%F).tar.gz.age"
+          rm -f schema.sql data.sql roles.sql
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nativecloud-backup
+          path: nativecloud-*.tar.gz.age
+          retention-days: 30
+          if-no-files-found: ignore

@@ -1,0 +1,21 @@
+name: Keep alive
+
+on:
+  schedule:
+    - cron: "41 7 * * 1,4"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Touch the project so the free tier doesn't pause it
+    runs-on: ubuntu-latest
+    env:
+      URL: ${{ secrets.SUPABASE_URL }}
+      KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - name: Ping
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "SUPABASE_URL or SUPABASE_ANON_KEY not set; nothing to ping"; exit 0; fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/apps?select=id" -H "apikey: $KEY" -H "authorization: Bearer $KEY")
+          echo "status $code"
+          [ "$code" = 200 ]

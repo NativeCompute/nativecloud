@@ -1,0 +1,32 @@
+/* app layout here--- */
+.app main, .auth main { max-width: none; margin: 0; padding: 0; }
+.find-icon { display: inline-grid; }
+.topbar-brand { display: flex; }
+.topbar .crumbs { display: none; }
+@media (min-width: 768px) {
+  .find-icon { display: none; }
+  .topbar .crumbs { display: flex; }
+}
+@media (min-width: 1024px) {
+  .topbar-brand { display: none; }
+}
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.row--between { justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--text-2); }
+.wide { grid-column: 1 / -1; }
+.swatches { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.swatch { width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; display: grid; place-items: center; }
+.swatch[aria-pressed="true"] { border-color: var(--signal-hi); box-shadow: inset 0 0 0 2px var(--void); }
+.swatch .avatar { pointer-events: none; }
+.filters { display: grid; gap: var(--s-3); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 768px) { .filters { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); align-items: end; } }
+.filters .input, .filters .select { min-height: 48px; font-size: var(--t-body); }
+.tray .field .input, .tray .field .select, .tray .field .textarea { font-size: var(--t-body); }
+.checks { display: grid; gap: var(--s-2); }
+.history { display: grid; }
+.history > li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s-2); padding-block: var(--s-3); border-bottom: 1px solid var(--line); }
+.splash { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; }
+.table .act .actions { flex-wrap: nowrap; justify-content: flex-end; gap: var(--s-1); }
+.btn:disabled, .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled::before { display: none; }
